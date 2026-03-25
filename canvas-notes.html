@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvas Notes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/konva/9.3.6/konva.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #111113;
+    --surface: #1a1a1e;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --border2: #3a3a48;
+    --text: #e8e8f0;
+    --text-dim: #6b6b80;
+    --accent: #7c6af7;
+    --accent2: #5a4fd4;
+    --danger: #e05555;
+    --success: #4caf7d;
+    --warn: #d4a44f;
+    --canvas-dot: #2a2a35;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', monospace;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  #app { width: 100vw; height: 100vh; position: relative; }
+
+  /* ── Toolbar ── */
+  #toolbar {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 6px 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+  }
+
+  .tool-sep {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  .tool-btn {
+    position: relative;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    font-size: 16px;
+  }
+  .tool-btn:hover { background: var(--surface2); color: var(--text); }
+  .tool-btn.active {
+    background: rgba(124,106,247,0.15);
+    border-color: rgba(124,106,247,0.4);
+    color: var(--accent);
+  }
+  .tool-btn .tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .tool-btn:hover .tooltip { opacity: 1; }
+
+  /* ── Properties Panel ── */
+  #props-panel {
+    position: fixed;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    width: 200px;
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #props-panel.visible { display: flex; }
+
+  .prop-label {
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+
+  .prop-row { display: flex; flex-direction: column; gap: 4px; }
+
+  .color-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.1s, transform 0.1s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: var(--text); }
+
+  .prop-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 5px 8px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .prop-input:focus { border-color: var(--accent); }
+
+  .prop-range {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .prop-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    text-align: center;
+  }
+  .prop-btn:hover { background: var(--border); }
+  .prop-btn.danger { color: var(--danger); border-color: rgba(224,85,85,0.3); }
+  .prop-btn.danger:hover { background: rgba(224,85,85,0.1); }
+
+  /* ── Zoom indicator ── */
+  #zoom-indicator {
+    position: fixed;
+    left: 16px;
+    bottom: 28px;
+    z-index: 100;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: color 0.12s;
+  }
+  #zoom-indicator:hover { color: var(--text); }
+
+  /* ── Canvas dot grid (CSS background) ── */
+  #canvas-container {
+    width: 100%; height: 100%;
+    background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: center center;
+  }
+
+  /* ── Text editor overlay ── */
+  #text-editor {
+    position: fixed;
+    display: none;
+    z-index: 200;
+    min-width: 120px;
+    min-height: 32px;
+    background: var(--surface);
+    border: 1.5px solid var(--accent);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    line-height: 1.5;
+    box-shadow: 0 4px 20px rgba(124,106,247,0.2);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── Chart modal ── */
+  #chart-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #chart-modal.visible { display: flex; }
+  #chart-modal-inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  #chart-modal h3 {
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .modal-row { display: flex; gap: 8px; align-items: center; }
+  .modal-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    outline: none;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+  #chart-data-rows { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+  .chart-type-row { display: flex; gap: 6px; }
+  .chart-type-btn {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 7px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.12s;
+  }
+  .chart-type-btn.active { background: rgba(124,106,247,0.15); border-color: rgba(124,106,247,0.4); color: var(--accent); }
+  .modal-btns { display: flex; gap: 8px; }
+  .modal-btn {
+    flex: 1;
+    padding: 8px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .modal-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .modal-btn.primary:hover { background: var(--accent2); }
+  .modal-btn.cancel { background: var(--surface2); color: var(--text-dim); }
+  .modal-btn.cancel:hover { background: var(--border); color: var(--text); }
+
+  /* ── Image modal ── */
+  #img-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #img-modal.visible { display: flex; }
+  #img-modal-inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  #img-modal h3 {
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .img-drop-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 12px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .img-drop-zone:hover, .img-drop-zone.drag-over {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .or-divider {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    position: relative;
+  }
+  .or-divider::before, .or-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: var(--border);
+  }
+  .or-divider::before { left: 0; }
+  .or-divider::after { right: 0; }
+
+  #context-menu {
+    position: fixed;
+    z-index: 400;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 5px;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    min-width: 150px;
+  }
+  #context-menu.visible { display: flex; }
+  .ctx-item {
+    padding: 7px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+    transition: background 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctx-item:hover { background: var(--surface2); }
+  .ctx-item.danger { color: var(--danger); }
+  .ctx-item.danger:hover { background: rgba(224,85,85,0.1); }
+  .ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-container"></div>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button class="tool-btn active" data-tool="select" id="btn-select">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1l10 6-5.5 1.5L6 14z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span class="tooltip">Select (V)</span>
+    </button>
+
+    <div class="tool-sep"></div>
+
+    <button class="tool-btn" data-tool="text" id="btn-text">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M8 3v10M5 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span class="tooltip">Text (T)</span>
+    </button>
+    <button class="tool-btn" data-tool="rect" id="btn-rect">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span class="tooltip">Rectangle (R)</span>
+    </button>
+    <button class="tool-btn" data-tool="ellipse" id="btn-ellipse">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="8" rx="6" ry="5" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span class="tooltip">Ellipse (E)</span>
+    </button>
+    <button class="tool-btn" data-tool="arrow" id="btn-arrow">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14L13 3M13 3H8M13 3v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="tooltip">Arrow (A)</span>
+    </button>
+
+    <div class="tool-sep"></div>
+
+    <button class="tool-btn" id="btn-image" data-tool="image">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="5.5" r="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 10.5l3.5-3.5 3 3 2-2 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="tooltip">Image (I)</span>
+    </button>
+    <button class="tool-btn" id="btn-chart" data-tool="chart">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 13V6l3 3 3-4 3 2 3-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span class="tooltip">Chart (C)</span>
+    </button>
+
+    <div class="tool-sep"></div>
+
+    <button class="tool-btn" id="btn-delete" title="Delete">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M6.5 8v4M9.5 8v4M4 5l.8 8h6.4L12 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="tooltip">Delete (Del)</span>
+    </button>
+    <button class="tool-btn" id="btn-clear">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M5 4V2.5h6V4M3 4l1 9.5h8L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="tooltip">Clear All</span>
+    </button>
+  </div>
+
+  <!-- Zoom indicator -->
+  <div id="zoom-indicator" title="Click to reset zoom">100%</div>
+
+  <!-- Properties panel -->
+  <div id="props-panel">
+    <div class="prop-row" id="prop-fill-row">
+      <div class="prop-label">Fill</div>
+      <div class="color-row" id="fill-swatches"></div>
+    </div>
+    <div class="prop-row" id="prop-stroke-row">
+      <div class="prop-label">Stroke</div>
+      <div class="color-row" id="stroke-swatches"></div>
+    </div>
+    <div class="prop-row" id="prop-strokew-row">
+      <div class="prop-label">Stroke Width <span id="strokew-val">2</span></div>
+      <input type="range" class="prop-range" id="stroke-width" min="1" max="12" value="2">
+    </div>
+    <div class="prop-row" id="prop-fontsize-row" style="display:none">
+      <div class="prop-label">Font Size <span id="fontsize-val">14</span></div>
+      <input type="range" class="prop-range" id="font-size" min="10" max="72" value="14">
+    </div>
+    <div class="prop-row" id="prop-opacity-row">
+      <div class="prop-label">Opacity <span id="opacity-val">100</span>%</div>
+      <input type="range" class="prop-range" id="opacity-range" min="10" max="100" value="100">
+    </div>
+    <button class="prop-btn danger" id="prop-delete">Delete</button>
+  </div>
+
+  <!-- Text editor -->
+  <div id="text-editor" contenteditable="true" spellcheck="false"></div>
+
+  <!-- Image modal -->
+  <div id="img-modal">
+    <div id="img-modal-inner">
+      <h3>Add Image</h3>
+      <div class="img-drop-zone" id="img-drop-zone">
+        Click or drop an image file here
+        <input type="file" id="img-file-input" accept="image/*" style="display:none">
+      </div>
+      <div class="or-divider">or</div>
+      <input type="text" class="modal-input" id="img-url-input" placeholder="Paste image URL...">
+      <div class="modal-btns">
+        <button class="modal-btn cancel" id="img-cancel">Cancel</button>
+        <button class="modal-btn primary" id="img-confirm">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart modal -->
+  <div id="chart-modal">
+    <div id="chart-modal-inner">
+      <h3>Add Chart</h3>
+      <div class="chart-type-row">
+        <div class="chart-type-btn active" data-type="bar">Bar</div>
+        <div class="chart-type-btn" data-type="line">Line</div>
+      </div>
+      <div id="chart-data-rows"></div>
+      <button class="prop-btn" id="chart-add-row" style="font-size:11px;font-family:'IBM Plex Mono',monospace;">+ Add Row</button>
+      <div class="modal-btns">
+        <button class="modal-btn cancel" id="chart-cancel">Cancel</button>
+        <button class="modal-btn primary" id="chart-confirm">Insert</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context menu -->
+  <div id="context-menu">
+    <div class="ctx-item" id="ctx-bring-front">⬆ Bring to Front</div>
+    <div class="ctx-item" id="ctx-send-back">⬇ Send to Back</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" id="ctx-duplicate">⧉ Duplicate</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item danger" id="ctx-delete">✕ Delete</div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════
+const COLORS = [
+  { name: 'none',    value: 'transparent' },
+  { name: 'white',   value: '#e8e8f0' },
+  { name: 'dark',    value: '#1a1a2e' },
+  { name: 'purple',  value: '#7c6af7' },
+  { name: 'blue',    value: '#4a9eff' },
+  { name: 'teal',    value: '#4caf9d' },
+  { name: 'green',   value: '#4caf7d' },
+  { name: 'yellow',  value: '#d4c44f' },
+  { name: 'orange',  value: '#d4844f' },
+  { name: 'red',     value: '#e05555' },
+];
+
+const STROKE_COLORS = [
+  { name: 'none',    value: 'transparent' },
+  { name: 'dim',     value: '#6b6b80' },
+  { name: 'white',   value: '#e8e8f0' },
+  { name: 'purple',  value: '#7c6af7' },
+  { name: 'blue',    value: '#4a9eff' },
+  { name: 'teal',    value: '#4caf9d' },
+  { name: 'green',   value: '#4caf7d' },
+  { name: 'yellow',  value: '#d4c44f' },
+  { name: 'orange',  value: '#d4844f' },
+  { name: 'red',     value: '#e05555' },
+];
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let currentTool = 'select';
+let selectedNode = null;
+let isDrawing = false;
+let drawStart = { x: 0, y: 0 };
+let drawShape = null;
+let currentFill = 'transparent';
+let currentStroke = '#e8e8f0';
+let currentStrokeWidth = 2;
+let currentFontSize = 14;
+let currentOpacity = 1;
+let editingText = null;
+let chartType = 'bar';
+let pendingImagePos = null;
+
+// ═══════════════════════════════════════════
+// STAGE SETUP
+// ═══════════════════════════════════════════
+const stage = new Konva.Stage({
+  container: 'canvas-container',
+  width: window.innerWidth,
+  height: window.innerHeight,
+  draggable: false,
+});
+
+const layer = new Konva.Layer();
+stage.add(layer);
+
+window.addEventListener('resize', () => {
+  stage.width(window.innerWidth);
+  stage.height(window.innerHeight);
+});
+
+// ═══════════════════════════════════════════
+// TRANSFORMER
+// ═══════════════════════════════════════════
+const transformer = new Konva.Transformer({
+  borderStroke: '#7c6af7',
+  borderStrokeWidth: 1.5,
+  anchorStroke: '#7c6af7',
+  anchorFill: '#1a1a2e',
+  anchorSize: 9,
+  anchorCornerRadius: 3,
+  rotationSnaps: [0, 45, 90, 135, 180, 225, 270, 315],
+  padding: 4,
+});
+layer.add(transformer);
+
+// ═══════════════════════════════════════════
+// TOOL BUTTONS
+// ═══════════════════════════════════════════
+const toolBtns = document.querySelectorAll('[data-tool]');
+function setTool(tool) {
+  currentTool = tool;
+  toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+  stage.container().style.cursor = tool === 'select' ? 'default' : 'crosshair';
+  if (tool !== 'select') deselect();
+}
+
+toolBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const t = btn.dataset.tool;
+    if (t === 'image') { openImgModal(); return; }
+    if (t === 'chart') { openChartModal(); return; }
+    setTool(t);
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'text-editor' || e.target.classList.contains('modal-input') || e.target.classList.contains('prop-input')) return;
+  const map = { v: 'select', t: 'text', r: 'rect', e: 'ellipse', a: 'arrow', i: 'image', c: 'chart' };
+  if (map[e.key.toLowerCase()]) {
+    const t = map[e.key.toLowerCase()];
+    if (t === 'image') { openImgModal(); return; }
+    if (t === 'chart') { openChartModal(); return; }
+    setTool(t);
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode) {
+    deleteSelected();
+  }
+  if (e.key === 'Escape') {
+    if (editingText) commitText();
+    deselect();
+    setTool('select');
+    closeContextMenu();
+  }
+});
+
+// ═══════════════════════════════════════════
+// COLOR SWATCHES
+// ═══════════════════════════════════════════
+function buildSwatches(containerId, colorList, initial, onChange) {
+  const container = document.getElementById(containerId);
+  colorList.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (c.value === initial ? ' active' : '');
+    sw.style.background = c.value === 'transparent'
+      ? 'linear-gradient(135deg, #333 25%, transparent 25%, transparent 75%, #333 75%), linear-gradient(135deg, #333 25%, #555 25%)'
+      : c.value;
+    if (c.value === 'transparent') sw.style.backgroundSize = '8px 8px';
+    sw.dataset.value = c.value;
+    sw.title = c.name;
+    sw.addEventListener('click', () => {
+      container.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+      onChange(c.value);
+    });
+    container.appendChild(sw);
+  });
+}
+
+buildSwatches('fill-swatches', COLORS, currentFill, v => {
+  currentFill = v;
+  if (selectedNode && selectedNode.fill !== undefined) {
+    selectedNode.fill(v); layer.batchDraw();
+    save();
+  }
+});
+
+buildSwatches('stroke-swatches', STROKE_COLORS, currentStroke, v => {
+  currentStroke = v;
+  if (selectedNode) {
+    if (selectedNode.stroke !== undefined) selectedNode.stroke(v);
+    layer.batchDraw();
+    save();
+  }
+});
+
+// ═══════════════════════════════════════════
+// STROKE WIDTH
+// ═══════════════════════════════════════════
+const strokeWidthInput = document.getElementById('stroke-width');
+const strokewVal = document.getElementById('strokew-val');
+strokeWidthInput.addEventListener('input', () => {
+  const v = parseInt(strokeWidthInput.value);
+  currentStrokeWidth = v;
+  strokewVal.textContent = v;
+  if (selectedNode && selectedNode.strokeWidth) {
+    selectedNode.strokeWidth(v);
+    layer.batchDraw();
+    save();
+  }
+});
+
+// ═══════════════════════════════════════════
+// FONT SIZE
+// ═══════════════════════════════════════════
+const fontSizeInput = document.getElementById('font-size');
+const fontsizeVal = document.getElementById('fontsize-val');
+fontSizeInput.addEventListener('input', () => {
+  const v = parseInt(fontSizeInput.value);
+  currentFontSize = v;
+  fontsizeVal.textContent = v;
+  if (selectedNode && selectedNode.fontSize) {
+    selectedNode.fontSize(v);
+    layer.batchDraw();
+    save();
+  }
+});
+
+// ═══════════════════════════════════════════
+// OPACITY
+// ═══════════════════════════════════════════
+const opacityRange = document.getElementById('opacity-range');
+const opacityVal = document.getElementById('opacity-val');
+opacityRange.addEventListener('input', () => {
+  const v = parseInt(opacityRange.value);
+  currentOpacity = v / 100;
+  opacityVal.textContent = v;
+  if (selectedNode) {
+    selectedNode.opacity(v / 100);
+    layer.batchDraw();
+    save();
+  }
+});
+
+// ═══════════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════════
+document.getElementById('btn-delete').addEventListener('click', deleteSelected);
+document.getElementById('prop-delete').addEventListener('click', deleteSelected);
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (!confirm('Clear all nodes?')) return;
+  layer.find('.node').forEach(n => n.destroy());
+  transformer.nodes([]);
+  selectedNode = null;
+  hidePanel();
+  layer.batchDraw();
+  save();
+});
+
+function deleteSelected() {
+  if (!selectedNode) return;
+  transformer.nodes([]);
+  selectedNode.destroy();
+  selectedNode = null;
+  hidePanel();
+  layer.batchDraw();
+  save();
+}
+
+// ═══════════════════════════════════════════
+// PAN & ZOOM
+// ═══════════════════════════════════════════
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let stageStart = { x: 0, y: 0 };
+
+stage.on('mousedown touchstart', e => {
+  if (currentTool !== 'select') return;
+  if (e.target === stage) {
+    isPanning = true;
+    panStart = stage.getPointerPosition();
+    stageStart = { x: stage.x(), y: stage.y() };
+    stage.container().style.cursor = 'grabbing';
+    deselect();
+  }
+});
+
+stage.on('mousemove touchmove', e => {
+  if (!isPanning) return;
+  const pos = stage.getPointerPosition();
+  stage.x(stageStart.x + pos.x - panStart.x);
+  stage.y(stageStart.y + pos.y - panStart.y);
+  stage.batchDraw();
+});
+
+stage.on('mouseup touchend', () => {
+  if (isPanning) {
+    isPanning = false;
+    stage.container().style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
+  }
+});
+
+stage.on('wheel', e => {
+  e.evt.preventDefault();
+  const oldScale = stage.scaleX();
+  const pointer = stage.getPointerPosition();
+  const mousePointTo = {
+    x: (pointer.x - stage.x()) / oldScale,
+    y: (pointer.y - stage.y()) / oldScale,
+  };
+  const delta = e.evt.deltaY > 0 ? 0.92 : 1.08;
+  const newScale = Math.min(Math.max(oldScale * delta, 0.1), 5);
+  stage.scale({ x: newScale, y: newScale });
+  stage.position({
+    x: pointer.x - mousePointTo.x * newScale,
+    y: pointer.y - mousePointTo.y * newScale,
+  });
+  stage.batchDraw();
+  updateZoom();
+});
+
+document.getElementById('zoom-indicator').addEventListener('click', () => {
+  stage.scale({ x: 1, y: 1 });
+  stage.position({ x: 0, y: 0 });
+  stage.batchDraw();
+  updateZoom();
+});
+
+function updateZoom() {
+  document.getElementById('zoom-indicator').textContent = Math.round(stage.scaleX() * 100) + '%';
+}
+
+// ═══════════════════════════════════════════
+// CANVAS POSITION HELPER
+// ═══════════════════════════════════════════
+function getCanvasPos() {
+  const p = stage.getPointerPosition();
+  return {
+    x: (p.x - stage.x()) / stage.scaleX(),
+    y: (p.y - stage.y()) / stage.scaleY(),
+  };
+}
+
+// ═══════════════════════════════════════════
+// SHAPE DRAWING
+// ═══════════════════════════════════════════
+stage.on('mousedown', e => {
+  if (isPanning) return;
+  if (currentTool === 'select' || currentTool === 'text') return;
+  if (e.target !== stage && currentTool !== 'arrow') return;
+
+  const pos = getCanvasPos();
+  drawStart = pos;
+  isDrawing = true;
+
+  if (currentTool === 'rect') {
+    drawShape = new Konva.Rect({
+      x: pos.x, y: pos.y,
+      width: 0, height: 0,
+      fill: currentFill,
+      stroke: currentStroke,
+      strokeWidth: currentStrokeWidth,
+      cornerRadius: 4,
+      name: 'node',
+      opacity: currentOpacity,
+    });
+  } else if (currentTool === 'ellipse') {
+    drawShape = new Konva.Ellipse({
+      x: pos.x, y: pos.y,
+      radiusX: 0, radiusY: 0,
+      fill: currentFill,
+      stroke: currentStroke,
+      strokeWidth: currentStrokeWidth,
+      name: 'node',
+      opacity: currentOpacity,
+    });
+  } else if (currentTool === 'arrow') {
+    drawShape = new Konva.Arrow({
+      points: [pos.x, pos.y, pos.x, pos.y],
+      stroke: currentStroke,
+      strokeWidth: currentStrokeWidth,
+      fill: currentStroke,
+      pointerLength: 10,
+      pointerWidth: 8,
+      lineCap: 'round',
+      name: 'node',
+      opacity: currentOpacity,
+    });
+  }
+
+  if (drawShape) {
+    layer.add(drawShape);
+    makeInteractive(drawShape);
+  }
+});
+
+stage.on('mousemove', e => {
+  if (!isDrawing || !drawShape) return;
+  const pos = getCanvasPos();
+
+  if (currentTool === 'rect') {
+    const x = Math.min(pos.x, drawStart.x);
+    const y = Math.min(pos.y, drawStart.y);
+    const w = Math.abs(pos.x - drawStart.x);
+    const h = Math.abs(pos.y - drawStart.y);
+    drawShape.x(x); drawShape.y(y);
+    drawShape.width(w); drawShape.height(h);
+  } else if (currentTool === 'ellipse') {
+    drawShape.x(drawStart.x);
+    drawShape.y(drawStart.y);
+    drawShape.radiusX(Math.abs(pos.x - drawStart.x));
+    drawShape.radiusY(Math.abs(pos.y - drawStart.y));
+  } else if (currentTool === 'arrow') {
+    drawShape.points([drawStart.x, drawStart.y, pos.x, pos.y]);
+  }
+  layer.batchDraw();
+});
+
+stage.on('mouseup', e => {
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (drawShape) {
+    // Discard tiny shapes
+    const size = currentTool === 'ellipse'
+      ? drawShape.radiusX() + drawShape.radiusY()
+      : (drawShape.width ? drawShape.width() + drawShape.height() : 20);
+    if (size < 5) { drawShape.destroy(); drawShape = null; layer.batchDraw(); return; }
+    selectNode(drawShape);
+    drawShape = null;
+    setTool('select');
+    save();
+  }
+});
+
+// ═══════════════════════════════════════════
+// TEXT TOOL
+// ═══════════════════════════════════════════
+stage.on('click', e => {
+  if (currentTool !== 'text') return;
+  if (e.target !== stage) return;
+  const pos = getCanvasPos();
+  openTextEditor(null, pos);
+});
+
+const textEditorEl = document.getElementById('text-editor');
+
+function openTextEditor(existingNode, pos) {
+  if (existingText) return;
+  editingText = existingNode;
+
+  let screenX, screenY;
+  if (existingNode) {
+    const absPos = existingNode.getAbsolutePosition();
+    screenX = absPos.x + stage.x();
+    screenY = absPos.y + stage.y();
+    textEditorEl.style.fontSize = (existingNode.fontSize() * stage.scaleX()) + 'px';
+    textEditorEl.style.color = existingNode.fill();
+    textEditorEl.innerText = existingNode.text();
+    existingNode.visible(false);
+  } else {
+    screenX = pos.x * stage.scaleX() + stage.x();
+    screenY = pos.y * stage.scaleY() + stage.y();
+    textEditorEl.style.fontSize = (currentFontSize * stage.scaleX()) + 'px';
+    textEditorEl.style.color = currentStroke;
+    textEditorEl.innerText = '';
+  }
+
+  textEditorEl.style.left = screenX + 'px';
+  textEditorEl.style.top = screenY + 'px';
+  textEditorEl.style.display = 'block';
+  textEditorEl.focus();
+
+  // Save pending position for new nodes
+  textEditorEl._pendingPos = pos;
+}
+
+let existingText = null;
+
+function commitText() {
+  const txt = textEditorEl.innerText.trim();
+  textEditorEl.style.display = 'none';
+
+  if (editingText) {
+    editingText.visible(true);
+    if (txt) editingText.text(txt);
+    else editingText.destroy();
+    editingText = null;
+    layer.batchDraw();
+    save();
+    return;
+  }
+
+  if (!txt) return;
+
+  const pos = textEditorEl._pendingPos;
+  const node = new Konva.Text({
+    x: pos.x, y: pos.y,
+    text: txt,
+    fontSize: currentFontSize,
+    fontFamily: 'IBM Plex Sans',
+    fill: currentStroke,
+    draggable: true,
+    name: 'node',
+    opacity: currentOpacity,
+  });
+  layer.add(node);
+  makeInteractive(node);
+  selectNode(node);
+  setTool('select');
+  save();
+}
+
+textEditorEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    commitText();
+  }
+  if (e.key === 'Escape') {
+    textEditorEl.style.display = 'none';
+    if (editingText) { editingText.visible(true); editingText = null; }
+    setTool('select');
+  }
+});
+
+textEditorEl.addEventListener('blur', () => {
+  setTimeout(() => {
+    if (document.activeElement !== textEditorEl) commitText();
+  }, 100);
+});
+
+// Double-click on text to edit
+stage.on('dblclick', e => {
+  if (e.target.className === 'Text') {
+    const node = e.target;
+    const absPos = node.getAbsolutePosition();
+    const pos = { x: node.x(), y: node.y() };
+    editingText = node;
+    openTextEditor(node, pos);
+  }
+});
+
+// ═══════════════════════════════════════════
+// SELECTION
+// ═══════════════════════════════════════════
+function makeInteractive(node) {
+  node.draggable(true);
+  node.on('click tap', e => {
+    if (currentTool !== 'select') return;
+    e.cancelBubble = true;
+    selectNode(node);
+  });
+  node.on('dragend', save);
+  node.on('transformend', save);
+  node.on('contextmenu', e => {
+    e.evt.preventDefault();
+    selectNode(node);
+    showContextMenu(e.evt.clientX, e.evt.clientY);
+  });
+}
+
+function selectNode(node) {
+  selectedNode = node;
+  transformer.nodes([node]);
+  layer.batchDraw();
+  showPanel(node);
+}
+
+function deselect() {
+  selectedNode = null;
+  transformer.nodes([]);
+  layer.batchDraw();
+  hidePanel();
+}
+
+stage.on('click', e => {
+  if (e.target === stage && currentTool === 'select') deselect();
+});
+
+// ═══════════════════════════════════════════
+// PROPERTIES PANEL
+// ═══════════════════════════════════════════
+function showPanel(node) {
+  const panel = document.getElementById('props-panel');
+  panel.classList.add('visible');
+
+  const isText = node.className === 'Text';
+  const isArrow = node.className === 'Arrow';
+  const isImage = node.className === 'Image';
+
+  document.getElementById('prop-fill-row').style.display = (isText || isArrow || isImage) ? 'none' : 'flex';
+  document.getElementById('prop-fontsize-row').style.display = isText ? 'flex' : 'none';
+
+  // Sync fill swatches
+  if (!isText && !isArrow && !isImage) {
+    document.querySelectorAll('#fill-swatches .color-swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.value === node.fill());
+    });
+  }
+
+  // Sync stroke swatches
+  const strokeColor = isText ? node.fill() : node.stroke?.() || '#e8e8f0';
+  document.querySelectorAll('#stroke-swatches .color-swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.value === strokeColor);
+  });
+
+  // Sync ranges
+  if (!isText && node.strokeWidth) {
+    const sw = node.strokeWidth();
+    strokeWidthInput.value = sw;
+    strokewVal.textContent = sw;
+  }
+  if (isText) {
+    const fs = node.fontSize();
+    fontSizeInput.value = fs;
+    fontsizeVal.textContent = fs;
+  }
+  const op = Math.round(node.opacity() * 100);
+  opacityRange.value = op;
+  opacityVal.textContent = op;
+}
+
+function hidePanel() {
+  document.getElementById('props-panel').classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════
+// IMAGE MODAL
+// ═══════════════════════════════════════════
+function openImgModal() {
+  const p = stage.getPointerPosition() || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  pendingImagePos = {
+    x: (p.x - stage.x()) / stage.scaleX(),
+    y: (p.y - stage.y()) / stage.scaleY(),
+  };
+  document.getElementById('img-modal').classList.add('visible');
+  document.getElementById('img-url-input').value = '';
+}
+
+document.getElementById('img-drop-zone').addEventListener('click', () => {
+  document.getElementById('img-file-input').click();
+});
+
+document.getElementById('img-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => insertImage(ev.target.result);
+  reader.readAsDataURL(file);
+});
+
+const dropZone = document.getElementById('img-drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev => insertImage(ev.target.result);
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('img-confirm').addEventListener('click', () => {
+  const url = document.getElementById('img-url-input').value.trim();
+  if (url) insertImage(url);
+  else document.getElementById('img-file-input').click();
+});
+
+document.getElementById('img-cancel').addEventListener('click', () => {
+  document.getElementById('img-modal').classList.remove('visible');
+});
+
+function insertImage(src) {
+  document.getElementById('img-modal').classList.remove('visible');
+  const img = new window.Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const maxW = 400, maxH = 300;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (w > maxW) { h = h * maxW / w; w = maxW; }
+    if (h > maxH) { w = w * maxH / h; h = maxH; }
+    const node = new Konva.Image({
+      x: pendingImagePos.x - w / 2,
+      y: pendingImagePos.y - h / 2,
+      image: img,
+      width: w, height: h,
+      name: 'node',
+      _src: src,
+    });
+    layer.add(node);
+    makeInteractive(node);
+    selectNode(node);
+    setTool('select');
+    layer.batchDraw();
+    save();
+  };
+  img.onerror = () => alert('Could not load image.');
+  img.src = src;
+}
+
+// ═══════════════════════════════════════════
+// CHART MODAL
+// ═══════════════════════════════════════════
+function openChartModal() {
+  document.getElementById('chart-modal').classList.add('visible');
+  document.getElementById('chart-data-rows').innerHTML = '';
+  ['Q1,42', 'Q2,68', 'Q3,55', 'Q4,81'].forEach(d => addChartRow(...d.split(',')));
+}
+
+function addChartRow(label = '', value = '') {
+  const row = document.createElement('div');
+  row.className = 'modal-row';
+  row.innerHTML = `
+    <input type="text" class="modal-input chart-label" placeholder="Label" value="${label}" style="max-width:90px">
+    <input type="number" class="modal-input chart-value" placeholder="Value" value="${value}">
+    <button style="background:none;border:none;color:#e05555;cursor:pointer;font-size:16px;padding:0 4px;" class="remove-row">✕</button>
+  `;
+  row.querySelector('.remove-row').addEventListener('click', () => row.remove());
+  document.getElementById('chart-data-rows').appendChild(row);
+}
+
+document.getElementById('chart-add-row').addEventListener('click', () => addChartRow());
+document.getElementById('chart-cancel').addEventListener('click', () => {
+  document.getElementById('chart-modal').classList.remove('visible');
+});
+
+document.querySelectorAll('.chart-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    chartType = btn.dataset.type;
+  });
+});
+
+document.getElementById('chart-confirm').addEventListener('click', () => {
+  const rows = document.querySelectorAll('#chart-data-rows .modal-row');
+  const data = [];
+  rows.forEach(row => {
+    const label = row.querySelector('.chart-label').value.trim();
+    const value = parseFloat(row.querySelector('.chart-value').value);
+    if (label && !isNaN(value)) data.push({ label, value });
+  });
+  if (data.length < 2) { alert('Add at least 2 data points.'); return; }
+  document.getElementById('chart-modal').classList.remove('visible');
+  insertChart(data, chartType);
+});
+
+function insertChart(data, type) {
+  const W = 320, H = 200, PAD = 36, INNER_H = H - PAD - 20, INNER_W = W - PAD - 10;
+  const maxVal = Math.max(...data.map(d => d.value));
+  const colors = ['#7c6af7','#4a9eff','#4caf9d','#d4c44f','#e05555','#d4844f'];
+
+  let chartSVG = '';
+  if (type === 'bar') {
+    const barW = Math.floor(INNER_W / data.length * 0.6);
+    const gap = INNER_W / data.length;
+    data.forEach((d, i) => {
+      const bh = Math.round((d.value / maxVal) * INNER_H);
+      const bx = PAD + i * gap + (gap - barW) / 2;
+      const by = PAD + INNER_H - bh;
+      chartSVG += `<rect x="${bx}" y="${by}" width="${barW}" height="${bh}" rx="3" fill="${colors[i % colors.length]}" opacity="0.9"/>`;
+      chartSVG += `<text x="${bx + barW / 2}" y="${H - 6}" font-size="9" fill="#6b6b80" text-anchor="middle" font-family="IBM Plex Mono">${d.label}</text>`;
+      chartSVG += `<text x="${bx + barW / 2}" y="${by - 4}" font-size="9" fill="#e8e8f0" text-anchor="middle" font-family="IBM Plex Mono">${d.value}</text>`;
+    });
+  } else {
+    const gap = INNER_W / (data.length - 1);
+    let pts = data.map((d, i) => {
+      const px = PAD + i * gap;
+      const py = PAD + INNER_H - (d.value / maxVal) * INNER_H;
+      return `${px},${py}`;
+    }).join(' ');
+    chartSVG += `<polyline points="${pts}" fill="none" stroke="#7c6af7" stroke-width="2" stroke-linejoin="round"/>`;
+    data.forEach((d, i) => {
+      const px = PAD + i * gap;
+      const py = PAD + INNER_H - (d.value / maxVal) * INNER_H;
+      chartSVG += `<circle cx="${px}" cy="${py}" r="4" fill="#7c6af7"/>`;
+      chartSVG += `<text x="${px}" y="${H - 6}" font-size="9" fill="#6b6b80" text-anchor="middle" font-family="IBM Plex Mono">${d.label}</text>`;
+      chartSVG += `<text x="${px}" y="${py - 8}" font-size="9" fill="#e8e8f0" text-anchor="middle" font-family="IBM Plex Mono">${d.value}</text>`;
+    });
+  }
+
+  // Grid lines
+  let gridLines = '';
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    const gy = PAD + INNER_H - f * INNER_H;
+    gridLines += `<line x1="${PAD}" y1="${gy}" x2="${W - 10}" y2="${gy}" stroke="#2a2a35" stroke-width="1"/>`;
+    if (f > 0) gridLines += `<text x="${PAD - 4}" y="${gy + 3}" font-size="8" fill="#3a3a48" text-anchor="end" font-family="IBM Plex Mono">${Math.round(maxVal * f)}</text>`;
+  });
+
+  const fullSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="background:#1a1a2e;border-radius:8px">${gridLines}${chartSVG}</svg>`;
+  const blob = new Blob([fullSVG], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const img = new window.Image();
+  img.onload = () => {
+    const p = stage.getPointerPosition() || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const pos = {
+      x: (p.x - stage.x()) / stage.scaleX() - W / 2,
+      y: (p.y - stage.y()) / stage.scaleY() - H / 2,
+    };
+    const node = new Konva.Image({
+      x: pos.x, y: pos.y,
+      image: img,
+      width: W, height: H,
+      name: 'node',
+      _chartData: { data, type },
+      _src: url,
+    });
+    layer.add(node);
+    makeInteractive(node);
+    selectNode(node);
+    setTool('select');
+    layer.batchDraw();
+    save();
+  };
+  img.src = url;
+}
+
+// ═══════════════════════════════════════════
+// CONTEXT MENU
+// ═══════════════════════════════════════════
+const ctxMenu = document.getElementById('context-menu');
+
+function showContextMenu(x, y) {
+  ctxMenu.style.left = x + 'px';
+  ctxMenu.style.top = y + 'px';
+  ctxMenu.classList.add('visible');
+}
+function closeContextMenu() { ctxMenu.classList.remove('visible'); }
+
+document.getElementById('ctx-bring-front').addEventListener('click', () => {
+  if (selectedNode) { selectedNode.moveToTop(); transformer.moveToTop(); layer.batchDraw(); save(); }
+  closeContextMenu();
+});
+document.getElementById('ctx-send-back').addEventListener('click', () => {
+  if (selectedNode) { selectedNode.moveToBottom(); layer.batchDraw(); save(); }
+  closeContextMenu();
+});
+document.getElementById('ctx-duplicate').addEventListener('click', () => {
+  if (!selectedNode) return;
+  const clone = selectedNode.clone({ x: selectedNode.x() + 20, y: selectedNode.y() + 20 });
+  layer.add(clone);
+  makeInteractive(clone);
+  selectNode(clone);
+  layer.batchDraw();
+  save();
+  closeContextMenu();
+});
+document.getElementById('ctx-delete').addEventListener('click', () => {
+  deleteSelected();
+  closeContextMenu();
+});
+
+stage.on('contextmenu', e => { if (e.target === stage) { e.evt.preventDefault(); closeContextMenu(); } });
+document.addEventListener('click', () => closeContextMenu());
+
+// ═══════════════════════════════════════════
+// PERSISTENCE
+// ═══════════════════════════════════════════
+function save() {
+  try {
+    const nodes = [];
+    layer.find('.node').forEach(n => {
+      if (n.className === 'Transformer') return;
+      const base = {
+        type: n.className,
+        x: n.x(), y: n.y(),
+        opacity: n.opacity(),
+        rotation: n.rotation(),
+        scaleX: n.scaleX(), scaleY: n.scaleY(),
+      };
+      if (n.className === 'Text') {
+        Object.assign(base, { text: n.text(), fontSize: n.fontSize(), fill: n.fill(), fontFamily: n.fontFamily() });
+      } else if (n.className === 'Rect') {
+        Object.assign(base, { width: n.width(), height: n.height(), fill: n.fill(), stroke: n.stroke(), strokeWidth: n.strokeWidth(), cornerRadius: n.cornerRadius() });
+      } else if (n.className === 'Ellipse') {
+        Object.assign(base, { radiusX: n.radiusX(), radiusY: n.radiusY(), fill: n.fill(), stroke: n.stroke(), strokeWidth: n.strokeWidth() });
+      } else if (n.className === 'Arrow') {
+        Object.assign(base, { points: n.points(), stroke: n.stroke(), strokeWidth: n.strokeWidth(), fill: n.fill(), pointerLength: n.pointerLength(), pointerWidth: n.pointerWidth() });
+      } else if (n.className === 'Image') {
+        if (n.attrs._chartData) {
+          Object.assign(base, { width: n.width(), height: n.height(), _chartData: n.attrs._chartData });
+        } else if (n.attrs._src) {
+          Object.assign(base, { width: n.width(), height: n.height(), _src: n.attrs._src });
+        }
+      }
+      nodes.push(base);
+    });
+    localStorage.setItem('canvas-notes', JSON.stringify({
+      nodes,
+      stage: { x: stage.x(), y: stage.y(), scale: stage.scaleX() }
+    }));
+  } catch (err) { console.warn('Save failed:', err); }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem('canvas-notes');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.stage) {
+      stage.x(data.stage.x); stage.y(data.stage.y);
+      stage.scale({ x: data.stage.scale, y: data.stage.scale });
+      updateZoom();
+    }
+    (data.nodes || []).forEach(n => restoreNode(n));
+    layer.batchDraw();
+  } catch (err) { console.warn('Load failed:', err); }
+}
+
+function restoreNode(n) {
+  let node;
+  const common = { x: n.x, y: n.y, opacity: n.opacity ?? 1, rotation: n.rotation ?? 0, scaleX: n.scaleX ?? 1, scaleY: n.scaleY ?? 1, name: 'node' };
+
+  if (n.type === 'Text') {
+    node = new Konva.Text({ ...common, text: n.text, fontSize: n.fontSize, fill: n.fill, fontFamily: n.fontFamily });
+  } else if (n.type === 'Rect') {
+    node = new Konva.Rect({ ...common, width: n.width, height: n.height, fill: n.fill, stroke: n.stroke, strokeWidth: n.strokeWidth, cornerRadius: n.cornerRadius });
+  } else if (n.type === 'Ellipse') {
+    node = new Konva.Ellipse({ ...common, radiusX: n.radiusX, radiusY: n.radiusY, fill: n.fill, stroke: n.stroke, strokeWidth: n.strokeWidth });
+  } else if (n.type === 'Arrow') {
+    node = new Konva.Arrow({ ...common, points: n.points, stroke: n.stroke, strokeWidth: n.strokeWidth, fill: n.fill, pointerLength: n.pointerLength, pointerWidth: n.pointerWidth, lineCap: 'round' });
+  } else if (n.type === 'Image') {
+    if (n._chartData) {
+      // Re-render chart
+      setTimeout(() => insertChartFromData(n._chartData.data, n._chartData.type, n.x, n.y, common), 0);
+      return;
+    } else if (n._src) {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const iNode = new Konva.Image({ ...common, image: img, width: n.width, height: n.height, _src: n._src });
+        layer.add(iNode);
+        makeInteractive(iNode);
+        layer.batchDraw();
+      };
+      img.src = n._src;
+      return;
+    }
+  }
+
+  if (node) { layer.add(node); makeInteractive(node); }
+}
+
+function insertChartFromData(data, type, x, y, common) {
+  const W = 320, H = 200, PAD = 36, INNER_H = H - PAD - 20, INNER_W = W - PAD - 10;
+  const maxVal = Math.max(...data.map(d => d.value));
+  const colors = ['#7c6af7','#4a9eff','#4caf9d','#d4c44f','#e05555','#d4844f'];
+  let chartSVG = '';
+  if (type === 'bar') {
+    const barW = Math.floor(INNER_W / data.length * 0.6);
+    const gap = INNER_W / data.length;
+    data.forEach((d, i) => {
+      const bh = Math.round((d.value / maxVal) * INNER_H);
+      const bx = PAD + i * gap + (gap - barW) / 2;
+      const by = PAD + INNER_H - bh;
+      chartSVG += `<rect x="${bx}" y="${by}" width="${barW}" height="${bh}" rx="3" fill="${colors[i % colors.length]}" opacity="0.9"/>`;
+      chartSVG += `<text x="${bx + barW / 2}" y="${H - 6}" font-size="9" fill="#6b6b80" text-anchor="middle" font-family="IBM Plex Mono">${d.label}</text>`;
+      chartSVG += `<text x="${bx + barW / 2}" y="${by - 4}" font-size="9" fill="#e8e8f0" text-anchor="middle" font-family="IBM Plex Mono">${d.value}</text>`;
+    });
+  } else {
+    const gap = INNER_W / (data.length - 1);
+    let pts = data.map((d, i) => `${PAD + i * gap},${PAD + INNER_H - (d.value / maxVal) * INNER_H}`).join(' ');
+    chartSVG += `<polyline points="${pts}" fill="none" stroke="#7c6af7" stroke-width="2" stroke-linejoin="round"/>`;
+    data.forEach((d, i) => {
+      const px = PAD + i * gap;
+      const py = PAD + INNER_H - (d.value / maxVal) * INNER_H;
+      chartSVG += `<circle cx="${px}" cy="${py}" r="4" fill="#7c6af7"/>`;
+      chartSVG += `<text x="${px}" y="${H - 6}" font-size="9" fill="#6b6b80" text-anchor="middle" font-family="IBM Plex Mono">${d.label}</text>`;
+      chartSVG += `<text x="${px}" y="${py - 8}" font-size="9" fill="#e8e8f0" text-anchor="middle" font-family="IBM Plex Mono">${d.value}</text>`;
+    });
+  }
+  let gridLines = '';
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    const gy = PAD + INNER_H - f * INNER_H;
+    gridLines += `<line x1="${PAD}" y1="${gy}" x2="${W - 10}" y2="${gy}" stroke="#2a2a35" stroke-width="1"/>`;
+    if (f > 0) gridLines += `<text x="${PAD - 4}" y="${gy + 3}" font-size="8" fill="#3a3a48" text-anchor="end" font-family="IBM Plex Mono">${Math.round(maxVal * f)}</text>`;
+  });
+  const fullSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="background:#1a1a2e;border-radius:8px">${gridLines}${chartSVG}</svg>`;
+  const blob = new Blob([fullSVG], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const img = new window.Image();
+  img.onload = () => {
+    const node = new Konva.Image({ ...common, x, y, image: img, width: W, height: H, _chartData: { data, type }, _src: url });
+    layer.add(node);
+    makeInteractive(node);
+    layer.batchDraw();
+  };
+  img.src = url;
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+load();
+</script>
+</body>
+</html>
